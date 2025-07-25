@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/weather_model.dart';
@@ -47,10 +46,12 @@ class WeatherProvider extends ChangeNotifier {
   }
 
   void removeFavorite(String city) async {
-    _favoriteCities.remove(city);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('favorites', _favoriteCities);
-    notifyListeners();
+    final removed = _favoriteCities.remove(city);
+    if (removed) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('favorites', _favoriteCities);
+      notifyListeners();
+    }
   }
 
   Future<void> fetchWeatherByCity(String city) async {
@@ -58,8 +59,10 @@ class WeatherProvider extends ChangeNotifier {
     try {
       final data = await _weatherService.getWeatherByCity(city);
       _weather = data;
+      _errorMessage = ''; // clear previous errors on success
     } catch (e) {
-      _errorMessage = 'Failed to fetch weather: $e';
+      _errorMessage = _parseError(e.toString());
+      _weather = null;
     }
     _setLoading(false);
   }
@@ -69,20 +72,39 @@ class WeatherProvider extends ChangeNotifier {
     try {
       final data = await _weatherService.getWeatherByLocation(lat, lon);
       _weather = data;
+      _errorMessage = ''; // clear previous errors on success
     } catch (e) {
-      _errorMessage = 'Failed to fetch weather: $e';
+      _errorMessage = _parseError(e.toString());
+      _weather = null;
     }
     _setLoading(false);
   }
 
+  String _parseError(String error) {
+    // Custom user-friendly error parsing
+    if (error.toLowerCase().contains('city not found')) {
+      return 'City not found. Please check the city name.';
+    }
+    if (error.toLowerCase().contains('location services are disabled')) {
+      return 'Location services are disabled. Please enable location.';
+    }
+    if (error.toLowerCase().contains('permission')) {
+      return 'Location permissions are denied. Please grant permissions.';
+    }
+    // Fall back generic message
+    return 'Failed to fetch weather. Please check your internet connection and try again.';
+  }
+
   void _setLoading(bool value) {
-    _isLoading = value;
-    _errorMessage = '';
-    notifyListeners();
+    if (_isLoading != value) {
+      _isLoading = value;
+      notifyListeners();
+    }
   }
 
   void clearWeather() {
     _weather = null;
+    _errorMessage = '';
     notifyListeners();
   }
 }
